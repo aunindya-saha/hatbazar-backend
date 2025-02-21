@@ -1,0 +1,30 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "Backend for HaatBazar2.0 - An Agro E-commerce Platform",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "keywords": [
+    "agro",
+    "e-commerce",
+    "marketplace"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "body-parser": "^1.20.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.18.2",
+    "mongoose": "^8.1.3",
+    "multer": "^1.4.5-lts.1"
+  },
+  "devDependencies": {
+    "axios": "^1.7.9",
+    "form-data": "^4.0.2",
+    "nodemon": "^3.0.3"
+  }
+}
