@@ -15,6 +15,7 @@ const SellerSchema = new mongoose.Schema({
     nid: { type: String },
     tinId: { type: String },
     tinDoc: { type: Buffer },
+    image: { type: String },
     password: { type: String, required: true }
 }, { timestamps: true });
 

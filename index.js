@@ -44,6 +44,18 @@ mongoose.connect(mongoURI, {
     process.exit(1);  // Exit the process if MongoDB connection fails
 });
 
+
+//landing page show total number of products, sellers and buyer 
+app.get('/api/statistics', async (req, res) => {
+    const stats = {
+        totalProducts: await Product.countDocuments(),
+        totalSellers: await Seller.countDocuments(),
+        totalBuyers: await Buyer.countDocuments()
+    };  
+    res.json(stats);
+});
+
+
 // buyer login
 app.post('/api/auth/buyer/login', async (req, res) => {
     const { email, password } = req.body;
@@ -79,6 +91,7 @@ app.post('/api/auth/admin/login', async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 }); 
+
 
 /**
  * Authentication Routes
@@ -124,9 +137,23 @@ app.get('/api/buyers/:id', async (req, res) => {
     }
 });
 
-app.put('/api/buyers/:id', async (req, res) => {
+app.put('/api/buyers/:id', upload.single('image'), async (req, res) => {
     try {
-        const buyer = await Buyer.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        // Convert image to base64 URL if present
+        const imageUrl = req.file 
+            ? `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`
+            : undefined; // Use undefined so it won't update if no new image
+
+        const updateData = {
+            ...req.body,
+            ...(imageUrl && { image: imageUrl }) // Only include image if new one uploaded
+        };
+
+        const buyer = await Buyer.findByIdAndUpdate(
+            req.params.id, 
+            updateData,
+            { new: true }
+        );
         res.json(buyer);
     } catch (error) {
         res.status(400).json({ error: error.message });
@@ -139,6 +166,15 @@ app.put('/api/buyers/:id', async (req, res) => {
  * GET /api/sellers/:id - Retrieve seller profile and business details
  * PUT /api/sellers/:id - Update seller information including TIN documents
  */
+//get all sellers   
+app.get('/api/sellers', async (req, res) => {
+    try {
+        const sellers = await Seller.find();
+        res.json(sellers);
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+});
 app.get('/api/sellers/:id', async (req, res) => {
     try {
         const seller = await Seller.findById(req.params.id);
@@ -266,7 +302,7 @@ app.post('/api/orders', async (req, res) => {
 
 app.get('/api/buyers/:buyerId/orders', async (req, res) => {
     try {
-        const orders = await Order.find({ buyer_id: req.params.buyerId })
+        const orders = await Order.find({ buyer_id: req.params.buyerId }).sort({ createdAt: -1 })
             .populate('ordered_products.product_id');
         res.json(orders);
     } catch (error) {
@@ -295,13 +331,37 @@ app.post('/api/transactions', async (req, res) => {
  */
 app.post('/api/reviews', upload.single('image'), async (req, res) => {
     try {
+        // Check for existing review
+        const existingReview = await Review.findOne({
+            buyer_id: req.body.buyer_id,
+            product_id: req.body.product_id
+        });
+
+        if (existingReview) {
+            return res.status(400).json({ error: "You have already reviewed this product" });
+        }
+
+        const imageUrl = req.file 
+            ? `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`
+            : null;
+
         const review = new Review({
             ...req.body,
-            image: req.file ? req.file.buffer : null
+            image: imageUrl
         });
         await review.save();
         
         res.status(201).json(review);
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+app.get('/api/buyers/:buyerId/reviews', async (req, res) => {
+    try {
+        const reviews = await Review.find({ buyer_id: req.params.buyerId })
+            .populate('product_id');
+        res.json(reviews);
     } catch (error) {
         res.status(400).json({ error: error.message });
     }
@@ -321,6 +381,17 @@ app.get('/api/products/:productId/reviews', async (req, res) => {
     }
 });
 
+// Add this new endpoint to check if user has already reviewed
+app.get('/api/reviews/check', async (req, res) => {
+    try {
+        const { buyer_id, product_id } = req.query;
+        const review = await Review.findOne({ buyer_id, product_id });
+        res.json({ hasReviewed: !!review });
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
 
 /**
  * Complaint Routes
@@ -329,6 +400,52 @@ app.get('/api/products/:productId/reviews', async (req, res) => {
  * POST /api/seller-complaints - File complaint against buyer with optional image
  * Features: Supports image attachments for evidence
  */
+// buyer complaint
+
+app.get('/api/complaints/buyer/:buyerId', async (req, res) => {
+    try {
+        const complaints = await BuyerComplaint.find({ accuser_id: req.params.buyerId })
+            .populate('complaint_id')
+            .populate('accuser_id')
+            .sort({ createdAt: -1 });
+        res.json(complaints);
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+//post buyer complaints 
+app.post('/api/complaints/buyer/:buyerId', upload.single('image'), async (req, res) => {
+    try {
+        // Convert the image buffer to base64 URL string if image exists
+        const imageUrl = req.file 
+            ? `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`
+            : null;
+
+        const complaint = new BuyerComplaint({
+            ...req.body,
+            image: imageUrl // Store as URL string instead of buffer
+        }); 
+        await complaint.save();
+        res.status(201).json(complaint);
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+});
+    
+// seller complaint
+app.get('/api/complaints/seller/:sellerId', async (req, res) => {
+    try {
+        const complaints = await SellerComplaint.find({ complaint_id: req.params.sellerId })
+            .populate('complaint_id')
+            .populate('accuser_id')
+            .sort({ createdAt: -1 });
+        res.json(complaints);
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+}); 
+
 app.post('/api/buyer-complaints', upload.single('image'), async (req, res) => {
     try {
         const complaint = new BuyerComplaint({
@@ -340,7 +457,7 @@ app.post('/api/buyer-complaints', upload.single('image'), async (req, res) => {
     } catch (error) {
         res.status(400).json({ error: error.message });
     }
-});
+    });
 
 //get all complaints
 app.get('/api/buyer-complaints', async (req, res) => {
